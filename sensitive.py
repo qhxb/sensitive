@@ -69,7 +69,7 @@ class BurpExtender(IBurpExtender, ITab, IHttpListener, IMessageEditorController,
             return        
         # 敏感信息
         bodyStr=messageInfo.getResponse().tostring()
-        retel = re.compile(r'((\W13[0-9]|14[57]|15[012356789]|17[0-9]|18[012356789])\d{8}\W)')
+        retel = re.compile(r'(\W(13[0-9]|14[57]|15[012356789]|17[0-9]|18[012356789])\d{8}\W)')
         reip = re.compile(r'(((25[0-5]|2[0-4]\d|((1\d{2})|([1-9]?\d)))\.){3}(25[0-5]|2[0-4]\d|((1\d{2})|([1-9]?\d))))')
         recardid = re.compile(r'(\W(\d{15}|\d{18})\W)')
         reemail = re.compile(r'(\W[A-Za-z0-9\u4e00-\u9fa5]+@[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)+\W)')
@@ -82,32 +82,36 @@ class BurpExtender(IBurpExtender, ITab, IHttpListener, IMessageEditorController,
         # create a new log entry with the message details
         if len(tel)|len(cardid)|len(ip)|len(email)|len(cardbin):
             sensitive=''
-            tels='{tel:'
-            ips='{ip:'
-            cardids='{cardid:'
-            emails='{email:'
-            cardbins='{cardbin:'
             if tel:
+                tels='{tel:'
                 for i in range(len(tel)):
                     tels=tels+tel[i][0]
-            tels=tels+'} '
+                tels=tels+'} '
+                sensitive=sensitive+tels
             if ip:
+                ips='{ip:'
                 for i in range(len(ip)):
-                    ips=ips+ip[i][0]
-            ips=ips+'} '
+                    ips=ips+ip[i][0]+'/'
+                ips=ips+'} '
+                sensitive=sensitive+ips
             if cardid:
+                cardids='{cardid:'
                 for i in range(len(cardid)):
                     cardids=cardids+cardid[i][0]
-            cardids=cardids+'} '
+                cardids=cardids+'} '
+                sensitive=sensitive+cardids
             if email:
+                emails='{email:'
                 for i in range(len(email)):
                     emails=emails+email[i][0]
-            emails=emails+'} '
+                emails=emails+'} '
+                sensitive=sensitive+emails
             if cardbin:
+                cardbins='{cardbin:'
                 for i in range(len(cardbin)):
                     cardbins=cardbins+cardbin[i][0]
-            cardbins=cardbins+'} '
-            sensitive=tels+ips+cardids+emails+cardbins
+                cardbins=cardbins+'} '
+                sensitive=sensitive+cardbins
             self._lock.acquire()
             row = self._log.size()
             self._log.add(LogEntry(toolFlag, self._callbacks.saveBuffersToTempFiles(messageInfo), self._helpers.analyzeRequest(messageInfo).getUrl(), sensitive))
