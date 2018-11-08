@@ -14,7 +14,7 @@ from javax.swing import JTable;
 from javax.swing import SwingUtilities;
 from javax.swing.table import AbstractTableModel;
 from threading import Lock
-import re
+import re,datetime
 
 class BurpExtender(IBurpExtender, ITab, IHttpListener, IMessageEditorController, AbstractTableModel):    
     #
@@ -30,6 +30,7 @@ class BurpExtender(IBurpExtender, ITab, IHttpListener, IMessageEditorController,
         # create the log and a lock on which to synchronize when adding log entries
         self._log = ArrayList()
         self._lock = Lock()
+        self._urls=[]
         # main split pane
         self._splitpane = JSplitPane(JSplitPane.VERTICAL_SPLIT)
         # table of log entries
@@ -68,55 +69,59 @@ class BurpExtender(IBurpExtender, ITab, IHttpListener, IMessageEditorController,
         if messageIsRequest:
             return        
         # 敏感信息
-        bodyStr=messageInfo.getResponse().tostring()
-        retel = re.compile(r'(\W(13[0-9]|14[57]|15[012356789]|17[0-9]|18[012356789])\d{8}\W)')
-        reip = re.compile(r'(((25[0-5]|2[0-4]\d|((1\d{2})|([1-9]?\d)))\.){3}(25[0-5]|2[0-4]\d|((1\d{2})|([1-9]?\d))))')
-        recardid = re.compile(r'(\W(\d{15}|\d{18})\W)')
-        reemail = re.compile(r'(\W[A-Za-z0-9\u4e00-\u9fa5]+@[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)+\W)')
-        recardbin = re.compile(r'((\W[1-9]{1})(\d{15}|\d{18})\W)')
-        tel = retel.findall(bodyStr)
-        ip=reip.findall(bodyStr)
-        cardid=recardid.findall(bodyStr)
-        email=reemail.findall(bodyStr)
-        cardbin=recardbin.findall(bodyStr)
-        # create a new log entry with the message details
-        if len(tel)|len(cardid)|len(ip)|len(email)|len(cardbin):
-            sensitive=''
-            if tel:
-                tels='{tel:'
-                for i in range(len(tel)):
-                    tels=tels+tel[i][0]
-                tels=tels+'} '
-                sensitive=sensitive+tels
-            if ip:
-                ips='{ip:'
-                for i in range(len(ip)):
-                    ips=ips+ip[i][0]+'/'
-                ips=ips+'} '
-                sensitive=sensitive+ips
-            if cardid:
-                cardids='{cardid:'
-                for i in range(len(cardid)):
-                    cardids=cardids+cardid[i][0]
-                cardids=cardids+'} '
-                sensitive=sensitive+cardids
-            if email:
-                emails='{email:'
-                for i in range(len(email)):
-                    emails=emails+email[i][0]
-                emails=emails+'} '
-                sensitive=sensitive+emails
-            if cardbin:
-                cardbins='{cardbin:'
-                for i in range(len(cardbin)):
-                    cardbins=cardbins+cardbin[i][0]
-                cardbins=cardbins+'} '
-                sensitive=sensitive+cardbins
-            self._lock.acquire()
-            row = self._log.size()
-            self._log.add(LogEntry(toolFlag, self._callbacks.saveBuffersToTempFiles(messageInfo), self._helpers.analyzeRequest(messageInfo).getUrl(), sensitive))
-            self.fireTableRowsInserted(row, row)
-            self._lock.release()
+            # 接口去重
+            if self._helpers.analyzeRequest(messageInfo).getUrl() not in self._urls:
+                bodyStr=messageInfo.getResponse().tostring()
+                retel = re.compile(r'(\W(13[0-9]|14[57]|15[012356789]|17[0-9]|18[012356789])\d{8}\W)')
+                reip = re.compile(r'(((25[0-5]|2[0-4]\d|((1\d{2})|([1-9]?\d)))\.){3}(25[0-5]|2[0-4]\d|((1\d{2})|([1-9]?\d))))')
+                recardid = re.compile(r'(\W(\d{15}|\d{18})[X]?\W)')
+                reemail = re.compile(r'(\W[A-Za-z0-9\u4e00-\u9fa5]+@[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)+\W)')
+                recardbin = re.compile(r'((\W[1-9]{1})(\d{15}|\d{18})\W)')
+                tel = retel.findall(bodyStr)
+                ip=reip.findall(bodyStr)
+                cardid=recardid.findall(bodyStr)
+                email=reemail.findall(bodyStr)
+                cardbin=recardbin.findall(bodyStr)
+                # create a new log entry with the message details
+                if len(tel)|len(cardid)|len(ip)|len(email)|len(cardbin):
+                    self._urls.append(self._helpers.analyzeRequest(messageInfo).getUrl())
+                    sensitive=''
+                    if tel:
+                        tels='{tel:'
+                        for i in range(len(tel)):
+                            tels=tels+tel[i][0]
+                        tels=tels+'} '
+                        sensitive=sensitive+tels
+                    if ip:
+                        ips='{ip:'
+                        for i in range(len(ip)):
+                            ips=ips+ip[i][0]+'/'
+                        ips=ips+'} '
+                        sensitive=sensitive+ips
+                    if cardid:
+                        cardids='{cardid:'
+                        for i in range(len(cardid)):
+                            cardids=cardids+cardid[i][0]
+                        cardids=cardids+'} '
+                        sensitive=sensitive+cardids
+                    if email:
+                        emails='{email:'
+                        for i in range(len(email)):
+                            emails=emails+email[i][0]
+                        emails=emails+'} '
+                        sensitive=sensitive+emails
+                    if cardbin:
+                        cardbins='{cardbin:'
+                        for i in range(len(cardbin)):
+                            cardbins=cardbins+cardbin[i][0]
+                        cardbins=cardbins+'} '
+                        sensitive=sensitive+cardbins
+                    time=datetime.datetime.now().strftime('%Y%m%d %H:%M:%S')
+                    self._lock.acquire()
+                    row = self._log.size()
+                    self._log.add(LogEntry(toolFlag, self._callbacks.saveBuffersToTempFiles(messageInfo), self._helpers.analyzeRequest(messageInfo).getUrl(), sensitive, time))
+                    self.fireTableRowsInserted(row, row)
+                    self._lock.release()
     #
     # extend AbstractTableModel
     #   
@@ -130,24 +135,24 @@ class BurpExtender(IBurpExtender, ITab, IHttpListener, IMessageEditorController,
 
     def getColumnName(self, columnIndex):
         if columnIndex == 0:
-            return "id"
+            return "time"
         if columnIndex == 1:
-        	return "tools"
+            return "tools"
         if columnIndex == 2:
-        	return "url"
+            return "url"
         if columnIndex == 3:
-        	return "sensitive"
+            return "sensitive"
         return ""
     def getValueAt(self, rowIndex, columnIndex):
         logEntry = self._log.get(rowIndex)
         if columnIndex == 0:
-            return rowIndex
+            return logEntry._time
         if columnIndex == 1:
             return self._callbacks.getToolName(logEntry._tool)
         if columnIndex == 2:
-        	return logEntry._url.toString()
+            return logEntry._url.toString()
         if columnIndex == 3:
-        	return logEntry._sensitive
+            return logEntry._sensitive
         return ""
     #
     # implement IMessageEditorController
@@ -179,8 +184,9 @@ class Table(JTable):
 # class to hold details of each log entry
 #
 class LogEntry:
-    def __init__(self, tool, requestResponse, url, sensitive):
+    def __init__(self, tool, requestResponse, url, sensitive, time):
         self._tool = tool
         self._requestResponse = requestResponse
         self._url = url
         self._sensitive = sensitive
+        self._time = time
