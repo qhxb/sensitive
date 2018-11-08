@@ -69,6 +69,8 @@ class BurpExtender(IBurpExtender, ITab, IHttpListener, IMessageEditorController,
         if messageIsRequest:
             return        
         # 敏感信息
+        # 只查找百度域名
+        if 'baidu.com' in str(messageInfo.getUrl()):
             # 接口去重
             if self._helpers.analyzeRequest(messageInfo).getUrl() not in self._urls:
                 bodyStr=messageInfo.getResponse().tostring()
